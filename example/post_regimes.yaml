@@ -1,0 +1,24 @@
+# Lizard API root
+lizardapi: https://brabant.lizard.net/api/v4
+
+# organisation uuid for Provincie Noord-Brabant
+organisation: {
+  uuid: c152eb26-47d7-4444-956c-15da0dcf5464,
+  }
+
+# period for mean regime
+period_mean: ["2009-01-01", "2016-12-31"]
+
+# number of locations to process (pagesize parameter)
+nlocs: 10 # 1000000
+
+# regime series to post
+regimes: [
+  {observation_type: 8416, name: regimecurve-ondergrens, code: WNS9040.regime.ondergrens, valuefield: regime_min},
+  {observation_type: 8415, name: regimecurve-bovengrens, code: WNS9040.regime.bovengrens, valuefield: regime_max},
+  {observation_type: 8414, name: regimecurve-gemiddelde, code: WNS9040.regime.gemiddelde, valuefield: regime_mean},
+  {observation_type: 8417, name: regimecurve-verschil, code: WNS9040.regime.verschil, valuefield: anomaly},
+  ]
+
+plot: True
+post: True
