@@ -172,7 +172,7 @@ def run(**kwargs):
     organisation = kwargs["organisation"]
     period_mean = kwargs["period_mean"]
     nlocs = kwargs.get("nlocs", 1)
-    regime_series = kwargs["regime_series"]
+    regimes = kwargs["regimes"]
     plot = kwargs.get("plot", False)
     post = kwargs.get("post", False)
     plot_years = kwargs.get("plot_years")
