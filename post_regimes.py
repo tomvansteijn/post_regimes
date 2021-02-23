@@ -38,9 +38,14 @@ def setup_filelogging(dirname="log", level=logging.INFO):
     logdir = Path(dirname)
     logdir.mkdir(exist_ok=True)
 
-    # filehandler
+    # log file
     timestamp = pd.Timestamp.today().strftime("%Y%m%d")
     logfile = logdir / f"{timestamp:}.log"
+    if logfile.exists():
+        # remove today's old logs
+        logfile.unlink()
+
+    # filehandler    
     filehandler = logging.FileHandler(logfile)
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -316,7 +321,7 @@ def run(**kwargs):
                         "name": f"{loc['name']:}, {regime['name']:}",
                         "access_modifier": 0,  # public
                         "code": regime["code"],
-                        "supplier": username,
+                        "supplier": credentials["username"],
                         "location": loc["uuid"],
                         "supplier_code": None,
                         "value_type": 1,  # float
