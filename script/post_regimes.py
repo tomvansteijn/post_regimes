@@ -200,9 +200,13 @@ def run(**kwargs):
     # headers
     headers = {
         "Content-Type": "application/json",
-        "username": credentials.get("username") or "__key__",
-        "password": credentials.get("password") or credentials.get("apikey"),
-    }
+        }
+    if "apikey" in credentials:
+        headers["username"] = "__key__"
+        headers["password"] = credentials["apikey"]
+    else:
+        headers["username"] = credentials.get("username")
+        headers["password"] = credentials.get("password")
 
     # requests session
     session = requests.Session()
@@ -326,9 +330,9 @@ def run(**kwargs):
                     log.exception("get existing regime series: request failed")
                     raise e
                 regime_results = get_ex_reg_rs.json()["results"]
-                try:
+                if len(regime_results) > 0:
                     regime_ts = regime_results[0]
-                except IndexError:
+                else:
                     log.info(
                         f"new timeseries for \"{loc['name']:}\", \"{regime['name']:}\""
                     )
