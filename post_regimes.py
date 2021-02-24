@@ -12,6 +12,7 @@ import calendar
 import logging
 import json
 import yaml
+import time
 import os
 
 
@@ -30,18 +31,23 @@ def get_parser():
         type=str,
         help=("YAML input file containing keyword arguments"),
     )
+    parser.add_argument(
+        "--keep-log",
+        dest="keep_log",
+        action="store_true",
+        help=("keep today's log file"),
+    )
     return parser
 
 
-def setup_filelogging(dirname="log", level=logging.INFO):
+def setup_logging(today, keep=False, dirname="log", level=logging.INFO):
     # create log directory
     logdir = Path(dirname)
     logdir.mkdir(exist_ok=True)
 
     # log file
-    timestamp = pd.Timestamp.today().strftime("%Y%m%d")
-    logfile = logdir / f"{timestamp:}.log"
-    if logfile.exists():
+    logfile = logdir / f"{today.strftime('%Y%m%d'):}.log"
+    if logfile.exists() and not keep:
         # remove today's old logs
         logfile.unlink()
 
@@ -181,12 +187,13 @@ def run(**kwargs):
     plot = kwargs.get("plot", False)
     post = kwargs.get("post", False)
     plot_years = kwargs.get("plot_years")
-
-    # log to file
-    log = setup_filelogging()
+    keep_log = kwargs.get("keep_log", False)
 
     # today
     today = pd.Timestamp.today()
+
+    # log to file
+    log = setup_logging(today, keep_log)
 
     # period for which mean regime is calculated
     start, end = pd.to_datetime(period_mean)
@@ -336,7 +343,7 @@ def run(**kwargs):
                         post_reg_rs.raise_for_status()
                     except Exception as e:
                         log.exception("post regime series: request failed")                        
-                    regime_ts = post_reg_rs.json()                
+                    regime_ts = post_reg_rs.json()           
 
                 # post data
                 evts_series = frame.loc[:, regime["valuefield"]].dropna()
@@ -362,6 +369,9 @@ def run(**kwargs):
                 except Exception as e:
                     log.exception("post regime series data: request failed")
                     raise e
+
+                # sleepytime
+                # time.sleep(0.1)
 
 
 def main():
