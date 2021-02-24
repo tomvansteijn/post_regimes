@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 # Tom van Steijn
 
+from requests.packages.urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
+
 from matplotlib import pyplot as plt
 import pandas as pd
 import requests
@@ -18,9 +21,7 @@ import os
 
 def get_parser():
     """get argumentparser and add arguments"""
-    parser = argparse.ArgumentParser(
-        "description",
-    )
+    parser = argparse.ArgumentParser("description",)
 
     # Command line arguments
     parser.add_argument(
@@ -51,7 +52,7 @@ def setup_logging(today, keep=False, dirname="log", level=logging.INFO):
         # remove today's old logs
         logfile.unlink()
 
-    # filehandler    
+    # filehandler
     filehandler = logging.FileHandler(logfile)
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -141,10 +142,7 @@ def plot_regime(pngfile, series, mean_regime, loc, years):
 
     # save figure
     plt.savefig(
-        pngfile,
-        bbox_inches="tight",
-        bbox_extra_artists=bxa,
-        dpi=200.0,
+        pngfile, bbox_inches="tight", bbox_extra_artists=bxa, dpi=200.0,
     )
     plt.close()
 
@@ -188,6 +186,7 @@ def run(**kwargs):
     post = kwargs.get("post", False)
     plot_years = kwargs.get("plot_years")
     keep_log = kwargs.get("keep_log", False)
+    username = kwargs.get("username") or credentials.get("username")
 
     # today
     today = pd.Timestamp.today()
@@ -201,9 +200,15 @@ def run(**kwargs):
     # headers
     headers = {
         "Content-Type": "application/json",
-        "username": credentials.get("username"),
-        "password": credentials.get("password"),
+        "username": credentials.get("username") or "__key__",
+        "password": credentials.get("password") or credentials.get("apikey"),
     }
+
+    # requests session
+    session = requests.Session()
+    retry = Retry(connect=3, backoff_factor=0.5)
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount(lizardapi, adapter)
 
     # get locations
     loc_url = lizardapi + "/locations"
@@ -211,7 +216,7 @@ def run(**kwargs):
         "pagesize": f"{nlocs:d}",
         "organisation__uuid": organisation["uuid"],
     }
-    get_loc_rs = requests.get(url=loc_url, headers=headers, params=loc_params)
+    get_loc_rs = session.get(url=loc_url, headers=headers, params=loc_params)
     try:
         get_loc_rs.raise_for_status()
     except Exception as e:
@@ -229,7 +234,7 @@ def run(**kwargs):
             "name": "WNS9040",
             "location__uuid": loc["uuid"],
         }
-        get_ts_rs = requests.get(url=ts_url, headers=headers, params=ts_params)
+        get_ts_rs = session.get(url=ts_url, headers=headers, params=ts_params)
         try:
             get_ts_rs.raise_for_status()
         except Exception as e:
@@ -244,7 +249,9 @@ def run(**kwargs):
                 continue
             ts_end = pd.to_datetime(ts["end"])
             if ts_end.year < today.year:
-                log.warning(f"skipping timeseries \"{ts['uuid']}\": no values in this year")
+                log.warning(
+                    f"skipping timeseries \"{ts['uuid']}\": no values in this year"
+                )
                 continue
 
             # get timeseries aggregate
@@ -256,7 +263,7 @@ def run(**kwargs):
                 "start": start,
                 "end": today,
             }
-            get_agg_rs = requests.get(url=agg_url, headers=headers, params=agg_params)
+            get_agg_rs = session.get(url=agg_url, headers=headers, params=agg_params)
             try:
                 get_agg_rs.raise_for_status()
             except Exception as e:
@@ -295,7 +302,7 @@ def run(**kwargs):
                     plot_years = [today.year - 1, today.year]
 
                 pngfile = plotdir / f"regime_{loc['name']}.png"
-                log.info(f"plot \"{pngfile:}\"")
+                log.info(f'plot "{pngfile:}"')
                 plot_regime(
                     pngfile, series, mean_regime, loc=loc["name"], years=plot_years
                 )
@@ -310,7 +317,7 @@ def run(**kwargs):
                     "location__uuid": loc["uuid"],
                     "observation_type__id": f"{regime['observation_type']:d}",
                 }
-                get_ex_reg_rs = requests.get(
+                get_ex_reg_rs = session.get(
                     url=ts_url, headers=headers, params=ex_reg_params
                 )
                 try:
@@ -322,13 +329,15 @@ def run(**kwargs):
                 try:
                     regime_ts = regime_results[0]
                 except IndexError:
-                    log.info(f"new timeseries for \"{loc['name']:}\", \"{regime['name']:}\"")
-                    # post new timeseries                   
+                    log.info(
+                        f"new timeseries for \"{loc['name']:}\", \"{regime['name']:}\""
+                    )
+                    # post new timeseries
                     regime_data = {
                         "name": f"{loc['name']:}, {regime['name']:}",
                         "access_modifier": 0,  # public
                         "code": regime["code"],
-                        "supplier": credentials["username"],
+                        "supplier": username,
                         "location": loc["uuid"],
                         "supplier_code": None,
                         "value_type": 1,  # float
@@ -337,22 +346,24 @@ def run(**kwargs):
                         "timeseries_type": None,
                         "datasource": None,
                     }
-                    post_reg_rs = requests.post(
-                        url=ts_url + "/", data=json.dumps(regime_data), headers=headers)
+                    post_reg_rs = session.post(
+                        url=ts_url + "/", data=json.dumps(regime_data), headers=headers
+                    )
                     try:
                         post_reg_rs.raise_for_status()
                     except Exception as e:
-                        log.exception("post regime series: request failed")                        
-                    regime_ts = post_reg_rs.json()           
+                        log.exception("post regime series: request failed")
+                        raise e
+                    regime_ts = post_reg_rs.json()
 
                 # post data
                 evts_series = frame.loc[:, regime["valuefield"]].dropna()
                 evts_data = data_records(evts_series)
-                evts_url = lizardapi + "/timeseries/" + regime_ts["uuid"] + "/events" 
+                evts_url = lizardapi + "/timeseries/" + regime_ts["uuid"] + "/events"
 
-                # delete existing data  
-                log.info(f"delete existing data at \"{regime_ts['uuid']:}\"")             
-                del_data_rs = requests.delete(url=evts_url, headers=headers)
+                # delete existing data
+                log.info(f"delete existing data at \"{regime_ts['uuid']:}\"")
+                del_data_rs = session.delete(url=evts_url, headers=headers)
                 try:
                     del_data_rs.raise_for_status()
                 except Exception as e:
@@ -360,8 +371,8 @@ def run(**kwargs):
                     raise e
 
                 # post new data
-                log.info(f"post new data at \"{regime_ts['uuid']:}\"")  
-                post_data_rs = requests.post(
+                log.info(f"post new data at \"{regime_ts['uuid']:}\"")
+                post_data_rs = session.post(
                     url=evts_url + "/", data=json.dumps(evts_data), headers=headers
                 )
                 try:
@@ -369,9 +380,6 @@ def run(**kwargs):
                 except Exception as e:
                     log.exception("post regime series data: request failed")
                     raise e
-
-                # sleepytime
-                # time.sleep(0.1)
 
 
 def main():
