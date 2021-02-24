@@ -17,6 +17,11 @@ Inhoud creds.yaml:
 username: {gebruikersnaam account}
 password: {wachtwoord account}
 ```
+of:
+
+```
+apikey: {lizard personal api key}
+```
 
 # voorbeeld grafiek
 ![Alt text](images/regime_B43D0017-001.png?raw=true "B43D0017-001")
