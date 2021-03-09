@@ -362,6 +362,11 @@ def run(**kwargs):
 
                 # post data
                 evts_series = frame.loc[:, regime["valuefield"]].dropna()
+                if not len(evts_series) > 0:
+                    log.warning(
+                        f"skipping timeseries \"{regime_ts['uuid']}\": no events"
+                    )
+                    continue
                 evts_data = data_records(evts_series)
                 evts_url = lizardapi + "/timeseries/" + regime_ts["uuid"] + "/events"
 
